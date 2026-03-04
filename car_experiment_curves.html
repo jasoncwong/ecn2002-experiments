@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Toy Car Factory — Production Curves</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #ffffff;
+    --surface: #f5f7fa;
+    --border: #dde1ea;
+    --text: #1a1d2e;
+    --muted: #6b7280;
+    --accent1: #1a3a6b;   /* gold — TP */
+    --accent2: #c0392b;   /* red — MP */
+    --accent3: #1e8449;   /* teal — AP */
+    --babson-green: #2d6a4f;
+    --babson-gold: #b8860b;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Sans', sans-serif;
+    min-height: 100vh;
+    padding: 2rem;
+  }
+
+  header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    margin-bottom: 2rem;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 1.25rem;
+  }
+
+  .title-block h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: 2rem;
+    color: var(--babson-gold);
+    line-height: 1.1;
+  }
+
+  .title-block p {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--muted);
+    margin-top: 0.35rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .controls {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .btn-group {
+    display: flex;
+    gap: 0;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .btn {
+    background: var(--surface);
+    color: var(--muted);
+    border: none;
+    padding: 0.5rem 1rem;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.78rem;
+    cursor: pointer;
+    transition: all 0.18s;
+    letter-spacing: 0.04em;
+    border-right: 1px solid var(--border);
+  }
+  .btn:last-child { border-right: none; }
+  .btn:hover { background: #252b3b; color: var(--text); }
+  .btn.active { background: var(--babson-green); color: #fff; font-weight: 600; }
+
+  .team-select {
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.78rem;
+    cursor: pointer;
+    appearance: none;
+    padding-right: 2rem;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%237a7f96' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.6rem center;
+  }
+
+  .charts-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+
+  .chart-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .chart-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+  }
+  .card-tp::before { background: linear-gradient(90deg, var(--accent1), transparent); }
+  .card-mpap::before { background: linear-gradient(90deg, var(--accent2), var(--accent3), transparent); }
+
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 1.25rem;
+  }
+
+  .card-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.1rem;
+    color: var(--text);
+  }
+
+  .card-subtitle {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--muted);
+    margin-top: 0.25rem;
+    letter-spacing: 0.05em;
+  }
+
+  .legend {
+    display: flex;
+    gap: 1rem;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.72rem;
+    font-family: 'IBM Plex Mono', monospace;
+    color: var(--muted);
+  }
+
+  .legend-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+  }
+
+  .chart-wrap {
+    position: relative;
+    height: 300px;
+  }
+
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 0.75rem;
+    margin-top: 1.25rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .stat-box {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.75rem;
+  }
+
+  .stat-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+  }
+
+  .stat-value {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.4rem;
+    color: var(--babson-gold);
+    margin-top: 0.2rem;
+  }
+
+  .annotation {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.68rem;
+    color: var(--muted);
+    margin-top: 0.25rem;
+  }
+
+  @media (max-width: 600px) {
+    header { flex-direction: column; align-items: flex-start; gap: 1rem; }
+    .title-block h1 { font-size: 1.5rem; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="title-block">
+    <h1>🏭 Toy Car Factory</h1>
+    <p>ECN2002 · Babson College · Production Theory Lab</p>
+  </div>
+  <div class="controls">
+    <div class="btn-group">
+      <button class="btn active" id="btnS4" onclick="setSection('S4')">Section 4</button>
+      <button class="btn" id="btnS5" onclick="setSection('S5')">Section 5</button>
+      <button class="btn" id="btnBoth" onclick="setSection('Both')">Both</button>
+    </div>
+    <div class="btn-group" id="aggGroup">
+      <button class="btn active" id="btnAvg" onclick="setAggMode('avg')">Avg</button>
+      <button class="btn" id="btnSum" onclick="setAggMode('sum')">Sum</button>
+    </div>
+    <select class="team-select" id="teamSelect" onchange="setTeam(this.value)">
+      <option value="all">All Teams (Avg)</option>
+    </select>
+  </div>
+</header>
+
+<div class="charts-grid">
+  <div class="chart-card card-tp">
+    <div class="card-header">
+      <div>
+        <div class="card-title">Total Product (TP)</div>
+        <div class="card-subtitle">CUMULATIVE CARS PRODUCED · LABOR ADDED EACH ROUND</div>
+      </div>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:var(--accent1)"></div> TP</div>
+      </div>
+    </div>
+    <div class="chart-wrap"><canvas id="tpChart"></canvas></div>
+    <div class="stats-row" id="tpStats"></div>
+  </div>
+
+  <div class="chart-card card-mpap">
+    <div class="card-header">
+      <div>
+        <div class="card-title">Marginal & Average Product (MP / AP)</div>
+        <div class="card-subtitle">INCREMENTAL OUTPUT vs. OUTPUT PER WORKER</div>
+      </div>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:var(--accent2)"></div> MP</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--accent3)"></div> AP</div>
+      </div>
+    </div>
+    <div class="chart-wrap"><canvas id="mpapChart"></canvas></div>
+    <div class="stats-row" id="mpapStats"></div>
+  </div>
+</div>
+
+<script>
+// ===== RAW DATA (cars produced per round) =====
+const raw = {
+  S4: {
+    'Career & Family':    [1,2,3,4,1],
+    'Abundance':          [2.5,2,2,5,2],
+    'Circus Maximus':     [1,1,2,0,0],
+    'Nudge':              [2,4,5,6,5],
+    'Age of Extraction':  [1,1,4,2,3],
+    'Edible Economics':   [3,4,5,5,7],
+    'Doughnut Economics': [1,1,3,2,2],
+    'Prediction Machines':[1,1,1,1,4],
+  },
+  S5: {
+    'Career & Family':    [0.5,0.5,1,3,3],
+    'Abundance':          [1,1.5,4,3,3],
+    'Circus Maximus':     [1,2,4,6,9],
+    'Nudge':              [3,4,3,4,1],
+    'Age of Extraction':  [1,2,2,3,1],
+    'Edible Economics':   [2,1,4,9,2],
+    'Doughnut Economics': [1.75,1.25,3,1,0],
+    'Prediction Machines':[0.5,2,3.5,2,2],
+  }
+};
+
+const ROUNDS = [0,1,2,3,4,5];
+const LABELS = ['L=0','L=1','L=2','L=3','L=4','L=5'];
+
+// Each round value IS the total product for that labor level; prepend 0 for L=0
+function buildTP(perRound) {
+  return [0, ...perRound]; // length 6: [0, L1, L2, L3, L4, L5]
+}
+
+function buildMP(tp) {
+  return tp.map((v,i) => i===0 ? 0 : v - tp[i-1]);
+}
+
+function buildAP(tp) {
+  return tp.map((v,i) => i===0 ? 0 : v/i);
+}
+
+function avgArrays(arrs) {
+  const len = arrs[0].length;
+  return arrs[0].map((_, i) => {
+    const vals = arrs.map(a => a[i]).filter(v => v !== null && !isNaN(v));
+    return vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
+  });
+}
+
+let currentSection = 'S4';
+let currentTeam = 'all';
+let aggMode = 'avg';
+
+function sumArrays(arrs) {
+  return arrs[0].map((_, i) => arrs.reduce((acc, a) => acc + (a[i] || 0), 0));
+}
+
+// Populate team dropdown
+function populateTeams() {
+  const sel = document.getElementById('teamSelect');
+  const allTeams = Object.keys(raw.S4);
+  sel.innerHTML = '<option value="all">All Teams (Avg)</option>';
+  allTeams.forEach(t => {
+    const opt = document.createElement('option');
+    opt.value = t; opt.textContent = t;
+    sel.appendChild(opt);
+  });
+}
+
+function getData() {
+  const teams = Object.keys(raw.S4);
+
+  if (currentTeam !== 'all') {
+    document.getElementById('aggGroup').style.display = 'none';
+    const sections = currentSection === 'Both' ? ['S4','S5'] : [currentSection];
+    const tpArrays = sections.map(s => buildTP(raw[s][currentTeam]));
+    const tp = sections.length > 1 ? avgArrays(tpArrays) : tpArrays[0];
+    return { tp, label: `${currentTeam}${currentSection==='Both'?' (avg)':''}` };
+  }
+
+  document.getElementById('aggGroup').style.display = 'flex';
+  const sections = currentSection === 'Both' ? ['S4','S5'] : [currentSection];
+  const allTPs = [];
+  sections.forEach(s => teams.forEach(t => allTPs.push(buildTP(raw[s][t]))));
+
+  const tp = aggMode === 'sum' ? sumArrays(allTPs) : avgArrays(allTPs);
+  const modeLabel = aggMode === 'sum' ? 'Total' : 'Average';
+  return { tp, label: `Section ${modeLabel} (${currentSection})` };
+}
+
+// Chart instances
+let tpChart, mpapChart;
+
+const chartDefaults = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: { display: false },
+    tooltip: {
+      backgroundColor: '#ffffff',
+      borderColor: '#dde1ea',
+      borderWidth: 1,
+      titleFont: { family: 'IBM Plex Mono', size: 11 },
+      bodyFont: { family: 'IBM Plex Mono', size: 11 },
+      callbacks: {
+        label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y !== null ? ctx.parsed.y.toFixed(2) : 'N/A'} cars`
+      }
+    }
+  },
+  scales: {
+    x: {
+      grid: { color: 'rgba(0,0,0,0.06)' },
+      ticks: { color: '#6b7280', font: { family: 'IBM Plex Mono', size: 11 } },
+      title: { display: true, text: 'Quantity of Labor', color: '#6b7280', font: { family: 'IBM Plex Mono', size: 11 } }
+    },
+    y: {
+      grid: { color: 'rgba(0,0,0,0.06)' },
+      ticks: { color: '#6b7280', font: { family: 'IBM Plex Mono', size: 11 } },
+      title: { display: true, text: 'Cars Produced', color: '#6b7280', font: { family: 'IBM Plex Mono', size: 11 } }
+    }
+  }
+};
+
+function renderCharts() {
+  const { tp, label } = getData();
+  const mp = buildMP(tp);
+  const ap = buildAP(tp);
+
+  // TP Chart
+  if (tpChart) tpChart.destroy();
+  tpChart = new Chart(document.getElementById('tpChart'), {
+    type: 'line',
+    data: {
+      labels: LABELS,
+      datasets: [{
+        label: 'Total Product',
+        data: tp,
+        borderColor: '#1a3a6b',
+        backgroundColor: 'rgba(26,58,107,0.08)',
+        pointBackgroundColor: '#1a3a6b',
+        pointRadius: 5,
+        pointHoverRadius: 7,
+        borderWidth: 2.5,
+        tension: 0.35,
+        fill: true,
+      }]
+    },
+    options: {
+      ...JSON.parse(JSON.stringify(chartDefaults)),
+      plugins: {
+        ...JSON.parse(JSON.stringify(chartDefaults.plugins)),
+        annotation: {}
+      }
+    }
+  });
+
+  // MP/AP Chart
+  if (mpapChart) mpapChart.destroy();
+  mpapChart = new Chart(document.getElementById('mpapChart'), {
+    type: 'line',
+    data: {
+      labels: LABELS,
+      datasets: [
+        {
+          label: 'Marginal Product',
+          data: mp,
+          borderColor: '#c0392b',
+          backgroundColor: 'rgba(192,57,43,0.08)',
+          pointBackgroundColor: '#c0392b',
+          pointRadius: 5,
+          pointHoverRadius: 7,
+          borderWidth: 2.5,
+          tension: 0.35,
+          spanGaps: true,
+        },
+        {
+          label: 'Average Product',
+          data: ap,
+          borderColor: '#1e8449',
+          backgroundColor: 'rgba(30,132,73,0.08)',
+          pointBackgroundColor: '#1e8449',
+          pointRadius: 5,
+          pointHoverRadius: 7,
+          borderWidth: 2.5,
+          tension: 0.35,
+          spanGaps: true,
+        }
+      ]
+    },
+    options: JSON.parse(JSON.stringify(chartDefaults))
+  });
+
+  // Stats
+  const maxTP = Math.max(...tp);
+  const maxMP = Math.max(...mp.filter(v => v !== null));
+  const maxMPRound = mp.indexOf(maxMP);
+  const lastMP = mp[mp.length-1];
+  const diminishRound = mp.findIndex((v,i) => i > 1 && v !== null && v < mp[i-1]);
+
+  document.getElementById('tpStats').innerHTML = `
+    <div class="stat-box">
+      <div class="stat-label">Peak Output</div>
+      <div class="stat-value">${maxTP.toFixed(1)}</div>
+      <div class="annotation">cars @ L=${tp.indexOf(maxTP)}</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">L=1 Output</div>
+      <div class="stat-value">${tp[1].toFixed(2)}</div>
+      <div class="annotation">first worker</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">L=5 Output</div>
+      <div class="stat-value">${tp[5].toFixed(2)}</div>
+      <div class="annotation">cumulative total</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">View</div>
+      <div class="stat-value" style="font-size:0.9rem;margin-top:0.4rem;color:var(--muted)">${label}</div>
+    </div>
+  `;
+
+  document.getElementById('mpapStats').innerHTML = `
+    <div class="stat-box">
+      <div class="stat-label">Peak MP</div>
+      <div class="stat-value">${maxMP.toFixed(2)}</div>
+      <div class="annotation">at L=${maxMPRound}</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Dim. Returns Start</div>
+      <div class="stat-value">L=${diminishRound > 0 ? diminishRound : '?'}</div>
+      <div class="annotation">MP begins falling</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Final MP</div>
+      <div class="stat-value">${lastMP !== null ? lastMP.toFixed(2) : 'N/A'}</div>
+      <div class="annotation">at L=5</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Final AP</div>
+      <div class="stat-value">${ap[5] !== null ? ap[5].toFixed(2) : 'N/A'}</div>
+      <div class="annotation">at L=5</div>
+    </div>
+  `;
+}
+
+function setAggMode(mode) {
+  aggMode = mode;
+  document.getElementById('btnAvg').classList.toggle('active', mode === 'avg');
+  document.getElementById('btnSum').classList.toggle('active', mode === 'sum');
+  renderCharts();
+}
+
+function setSection(s) {
+  currentSection = s;
+  ['btnS4','btnS5','btnBoth'].forEach(id => document.getElementById(id).classList.remove('active'));
+  document.getElementById(`btn${s.replace('oth','oth')}`).classList.add('active');
+  if (s==='S4') document.getElementById('btnS4').classList.add('active');
+  else if (s==='S5') document.getElementById('btnS5').classList.add('active');
+  else document.getElementById('btnBoth').classList.add('active');
+  renderCharts();
+}
+
+function setTeam(t) {
+  currentTeam = t;
+  renderCharts();
+}
+
+populateTeams();
+renderCharts();
+</script>
+</body>
+</html>
